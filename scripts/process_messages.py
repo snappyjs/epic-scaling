@@ -75,14 +75,51 @@ def ensure_job(batch_client: BatchServiceClient, job_id: str, pool_id: str) -> N
             raise
 
 
-def add_task(batch_client: BatchServiceClient, job_id: str, task_id: str, command: str, metadata: Dict[str, Any]) -> None:
-    command_line = f"/bin/bash -c {shlex.quote(command)}"
+def serialize_metadata_for_env(metadata: Dict[str, Any]) -> str:
+    try:
+        return json.dumps(metadata, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return json.dumps({"_warning": "Metadata was not JSON-serializable"})
+
+
+def add_task(
+    batch_client: BatchServiceClient,
+    job_id: str,
+    task_id: str,
+    command: str,
+    metadata: Dict[str, Any],
+    container_image: str,
+) -> None:
+    container_command = "python /app/main.py"
+    command_line = f"/bin/bash -c {shlex.quote(container_command)}"
     constraints = batch_models.TaskConstraints(max_task_retry_count=0)
+
+    environment_settings = [
+        batch_models.EnvironmentSetting(name="TASK_JOB_ID", value=job_id),
+        batch_models.EnvironmentSetting(name="TASK_ID", value=task_id),
+        batch_models.EnvironmentSetting(name="TASK_ATTEMPT", value="1"),
+    ]
+
+    if command:
+        environment_settings.append(
+            batch_models.EnvironmentSetting(name="TASK_COMMAND", value=command)
+        )
+
+    if metadata:
+        metadata_json = serialize_metadata_for_env(metadata)
+        environment_settings.append(
+            batch_models.EnvironmentSetting(name="TASK_METADATA", value=metadata_json)
+        )
+
+    container_settings = batch_models.TaskContainerSettings(image_name=container_image)
+
     task = batch_models.TaskAddParameter(
         id=task_id,
         command_line=command_line,
         display_name=metadata.get("display_name", task_id),
         constraints=constraints,
+        environment_settings=environment_settings,
+        container_settings=container_settings,
     )
 
     try:
@@ -107,7 +144,12 @@ def extract_body(message: Any) -> str:
     return str(body)
 
 
-def process_message(batch_client: BatchServiceClient, pool_id: str, message: Any) -> None:
+def process_message(
+    batch_client: BatchServiceClient,
+    pool_id: str,
+    container_image: str,
+    message: Any,
+) -> None:
     payload = json.loads(extract_body(message))
     job_id = payload.get("job_id")
     task_id = payload.get("task_id")
@@ -118,7 +160,7 @@ def process_message(batch_client: BatchServiceClient, pool_id: str, message: Any
         raise ValueError("Message must contain 'job_id' and 'task_id'")
 
     ensure_job(batch_client, job_id, pool_id)
-    add_task(batch_client, job_id, task_id, command, metadata)
+    add_task(batch_client, job_id, task_id, command, metadata, container_image)
 
 
 def main() -> None:
@@ -135,6 +177,7 @@ def main() -> None:
     connection_string = require_env("SERVICE_BUS_CONNECTION_STRING")
     queue_name = require_env("SERVICE_BUS_QUEUE_NAME")
     batch_pool_id = require_env("BATCH_POOL_ID")
+    job_container_image = require_env("JOB_CONTAINER_IMAGE")
 
     parser = argparse.ArgumentParser(description="Process messages and submit Batch jobs")
     parser.add_argument(
@@ -182,7 +225,12 @@ def main() -> None:
 
                 for message in messages:
                     try:
-                        process_message(batch_client, batch_pool_id, message)
+                        process_message(
+                            batch_client,
+                            batch_pool_id,
+                            job_container_image,
+                            message,
+                        )
                         receiver.complete_message(message)
                         processed += 1
                         if args.max_messages and processed >= args.max_messages:
