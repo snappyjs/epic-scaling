@@ -39,3 +39,29 @@ output "batch_pool_id" {
   description = "Batch pool identifier."
   value       = azurerm_batch_pool.poc.name
 }
+
+output "container_registry_name" {
+  description = "Azure Container Registry name."
+  value       = azurerm_container_registry.main.name
+}
+
+output "container_registry_login_server" {
+  description = "Azure Container Registry login server (fully qualified registry hostname)."
+  value       = azurerm_container_registry.main.login_server
+}
+
+output "container_registry_admin_username" {
+  description = "Admin username for the Azure Container Registry (enabled for POC)."
+  value       = azurerm_container_registry.main.admin_username
+}
+
+output "container_registry_admin_password" {
+  description = "Admin password for the Azure Container Registry."
+  value       = azurerm_container_registry.main.admin_password
+  sensitive   = true
+}
+
+output "job_container_image" {
+  description = "Fully qualified container image used by Batch tasks."
+  value       = local.job_container_image
+}

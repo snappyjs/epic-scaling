@@ -31,7 +31,7 @@ variable "batch_pool_id" {
 variable "batch_pool_vm_size" {
   description = "Virtual machine size for Batch pool compute nodes."
   type        = string
-  default     = "STANDARD_A1_v2"
+  default     = "Standard_D2s_v3"
 }
 
 variable "batch_node_agent_sku" {
@@ -49,9 +49,9 @@ variable "batch_image" {
     version   = string
   })
   default = {
-    publisher = "Canonical"
-    offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts"
+    publisher = "microsoft-dsvm"
+    offer     = "ubuntu-hpc"
+    sku       = "2204"
     version   = "latest"
   }
 }
@@ -65,7 +65,7 @@ variable "batch_pool_min_nodes" {
 variable "batch_pool_max_nodes" {
   description = "Maximum number of dedicated nodes that autoscale can allocate."
   type        = number
-  default     = 5
+  default     = 2
 }
 
 variable "batch_pool_max_low_priority_nodes" {
@@ -96,4 +96,22 @@ variable "tags" {
   description = "Common tags applied to all resources."
   type        = map(string)
   default     = {}
+}
+
+variable "container_registry_sku" {
+  description = "SKU for the Azure Container Registry (Basic is sufficient for POC)."
+  type        = string
+  default     = "Basic"
+}
+
+variable "job_container_image_repository" {
+  description = "Repository name in the container registry for the job runner image."
+  type        = string
+  default     = "job-runner"
+}
+
+variable "job_container_image_tag" {
+  description = "Tag for the job runner image stored in the container registry."
+  type        = string
+  default     = "latest"
 }

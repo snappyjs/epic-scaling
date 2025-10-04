@@ -13,6 +13,7 @@ locals {
   servicebus_namespace_name = substr("${local.sanitized_prefix}-sb-${local.suffix}", 0, 50)
   storage_account_name      = substr("${local.sanitized_prefix}${local.suffix}", 0, 24)
   batch_account_name        = substr("${local.sanitized_prefix}batch${local.suffix}", 0, 24)
+  container_registry_name   = substr("${local.sanitized_prefix}acr${local.suffix}", 0, 50)
 
   default_batch_pool_auto_scale_formula = <<-EOT
     startingNumberOfVMs = ${var.batch_pool_min_nodes};
@@ -50,6 +51,20 @@ resource "azurerm_storage_account" "batch" {
   }
 
   tags = var.tags
+}
+
+resource "azurerm_container_registry" "main" {
+  name                = local.container_registry_name
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = var.container_registry_sku
+  admin_enabled       = true
+
+  tags = var.tags
+}
+
+locals {
+  job_container_image = "${azurerm_container_registry.main.login_server}/${var.job_container_image_repository}:${var.job_container_image_tag}"
 }
 
 resource "azurerm_servicebus_namespace" "main" {
@@ -104,6 +119,15 @@ resource "azurerm_batch_pool" "poc" {
     offer     = var.batch_image.offer
     sku       = var.batch_image.sku
     version   = var.batch_image.version
+  }
+
+  container_configuration {
+    type = "DockerCompatible"
+    container_registries {
+      registry_server = azurerm_container_registry.main.login_server
+      user_name       = azurerm_container_registry.main.admin_username
+      password        = azurerm_container_registry.main.admin_password
+    }
   }
 
   auto_scale {
